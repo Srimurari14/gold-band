@@ -1,0 +1,13 @@
+yfinance
+fredapi
+pandas
+numpy
+pyarrow
+arch
+scikit-learn
+lightgbm
+streamlit
+plotly
+matplotlib
+python-dotenv
+pytest
