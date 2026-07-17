@@ -11,3 +11,4 @@ plotly
 matplotlib
 python-dotenv
 pytest
+streamlit-autorefresh
