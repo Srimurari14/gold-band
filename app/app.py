@@ -655,6 +655,23 @@ if exp is not None:
 
     with c1:
         pred_delta = (exp["pred_price"] / exp["spot"] - 1) * 100
+
+        if usdinr:
+            spot_10g_inr = inr_per_10g(exp["spot"], usdinr)
+            pred_10g_inr = inr_per_10g(exp["pred_price"], usdinr)
+            inr_exp_row = (
+                f"<div class='inr-row'>"
+                f"<div class='unit-label' style='margin-bottom:0.3rem'>Same guess, in rupees per 10 grams</div>"
+                f"<div style='display:flex;gap:2rem;align-items:baseline'>"
+                f"<div><div class='unit-inr'>₹{spot_10g_inr:,.0f}</div>"
+                f"<div class='unit-label'>simple guess</div></div>"
+                f"<div><div class='unit-inr' style='color:{AMBER}'>₹{pred_10g_inr:,.0f}</div>"
+                f"<div class='unit-label'>model's guess</div></div>"
+                f"</div></div>"
+            )
+        else:
+            inr_exp_row = ""
+
         st.markdown(
             f"<div class='experimental-card'>"
             f"<div class='sub' style='margin-bottom:0.5rem'>A computer model was "
@@ -668,6 +685,7 @@ if exp is not None:
             f"${exp['pred_price']:,.0f}</div>"
             f"<div class='unit-label'>model's guess ({pred_delta:+.2f}%)</div></div>"
             f"</div>"
+            f"{inr_exp_row}"
             f"<div class='sub' style='margin-top:0.8rem'>{record_txt}</div></div>",
             unsafe_allow_html=True,
         )
@@ -710,7 +728,8 @@ is the easiest mistake to make when looking at this box.
 
 **The big range in the middle is the whole point of this page.** It says
 that next week, gold will most likely end up somewhere between two numbers.
-Not exactly where, just somewhere in that range.
+Not exactly where, just somewhere in that range. Both a dollar version and a
+rupee version are shown.
 
 **The choice between 80% and 95%** changes how sure you want to be. At 80
 percent, the real price stays inside the range about 4 weeks out of 5. One
@@ -731,8 +750,9 @@ middle is not a prediction, it is simply today's price drawn forward,
 because nothing does better than that.
 
 **The experiment section**, if you see it, is something different being
-tested live: a model trying to guess tomorrow's exact price. It has not
-earned trust yet. It is there to watch, not to act on.
+tested live: a model trying to guess tomorrow's exact price, in both
+dollars and rupees. It has not earned trust yet. It is there to watch, not
+to act on.
 
 The one thing worth remembering through all of this: nothing here will ever
 tell you gold is about to go up or down. Nobody can honestly tell you that.
@@ -786,9 +806,10 @@ five different programs. The best one barely beat a simple "tomorrow will be
 the same as today" guess, by less than one fifth of one percent, and even
 that thin edge came from doing badly for the first few years and then doing
 well for the rest. That is not solid enough to trust, so instead of using
-it, it is being tracked live (see the experiment box above, if it is
-showing). If it earns a real edge over the next couple of months, it will be
-added properly. If it does not, that will be reported honestly too.
+it, it is being tracked live, in both dollars and rupees (see the experiment
+box above, if it is showing). If it earns a real edge over the next couple
+of months, it will be added properly. If it does not, that will be reported
+honestly too.
 
 This is why the dotted line down the middle of the chart is simply today's
 price drawn forward. Nothing has beaten that fairly yet, so nothing has
