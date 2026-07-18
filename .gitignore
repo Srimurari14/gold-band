@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 data/raw/
 .ipynb_checkpoints/
+src/catboost_info/
+src/catboost_info/
