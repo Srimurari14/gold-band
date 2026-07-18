@@ -2,8 +2,8 @@ name: Nightly data pull
 
 on:
   schedule:
-    - cron: "0 23 * * 1-5"   # 23:00 UTC weekdays — after US close
-  workflow_dispatch:          # lets you trigger it manually
+    - cron: "0 23 * * 1-5"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,8 +20,7 @@ jobs:
           cache: pip
 
       - name: Install
-        run: |
-          pip install yfinance fredapi pandas numpy pyarrow python-dotenv
+        run: pip install yfinance fredapi pandas numpy pyarrow python-dotenv
 
       - name: Pull and rebuild
         env:
@@ -30,12 +29,13 @@ jobs:
           cd src
           python ingest.py
           python features.py
+          python -c "import features as F; F.build_dataset(save=True, horizon=1)"
 
       - name: Commit if changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/processed/dataset.parquet
+          git add data/processed/dataset.parquet data/processed/dataset_h1.parquet
           if git diff --staged --quiet; then
             echo "no change"
           else

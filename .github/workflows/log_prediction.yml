@@ -2,7 +2,7 @@ name: Log daily prediction
 
 on:
   schedule:
-    - cron: "30 23 * * 1-5"   # 30 min after the data pull
+    - cron: "30 23 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -20,9 +20,11 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install pandas numpy pyarrow arch scipy python-dotenv
+        run: |
+          pip install pandas numpy pyarrow arch scipy python-dotenv \
+                      scikit-learn lightgbm xgboost catboost
 
-      - name: Log today's band
+      - name: Log today's predictions
         run: |
           cd src
           python log_prediction.py
@@ -31,7 +33,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add logs/predictions.csv
+          git add logs/predictions.csv logs/daily_predictions.csv
           if git diff --staged --quiet; then
             echo "no change"
           else
