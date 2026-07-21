@@ -3,9 +3,10 @@
 
 USD is the model's native currency. INR figures are a convenience estimate:
 today's dollar price, converted at today's exchange rate, with an estimate
-for import duty, GST, and a typical dealer margin added on. It is not a
+for import duty, GST, and a typical dealer premium added on. It is not a
 quote, and it does not account for the rupee itself moving, only for gold's
-dollar price moving. That gap is stated plainly in the limitations.
+dollar price moving. That gap is stated plainly wherever a future price is
+converted.
 
 Price refreshes every 30 seconds. The band does not, because it is built
 from full days of price history, not seconds.
@@ -39,9 +40,6 @@ st_autorefresh(interval=30_000, key="price_refresh")
 OZ_TO_GRAM = 31.1034768
 
 # Confirmed current as of May 2026: duty raised from 6% to 15%.
-# GST is 3% on bullion. Dealer premium varies by shop; 100 INR per 10g is a
-# rough midpoint, not a quote. Making charges are excluded entirely since
-# they vary too much shop to shop to estimate honestly.
 IMPORT_DUTY = 0.15
 GST = 0.03
 DEALER_PREMIUM_10G = 100
@@ -63,6 +61,49 @@ BACKTEST = {
 
 WEEKLY_LOG = ROOT / "logs" / "predictions.csv"
 DAILY_LOG = ROOT / "logs" / "daily_predictions.csv"
+
+# The 18 features the models were trained on, grouped and described in plain
+# words. Kept here as data so the evidence section and any future summary
+# stay in sync with what features.py actually builds.
+FEATURE_GROUPS = [
+    ("Gold's own recent moves", [
+        "How much gold changed yesterday",
+        "How much gold changed over the last week",
+        "How much gold changed over the last month",
+    ]),
+    ("How much gold has been swinging", [
+        "How jumpy gold's price has been over the last week",
+        "How jumpy gold's price has been over the last month",
+    ]),
+    ("The US dollar", [
+        "How strong the US dollar is right now",
+        "How much the dollar's strength has changed in the last week",
+    ]),
+    ("How nervous investors are", [
+        "The VIX, a common measure of fear in the stock market, right now",
+        "How much that fear measure has changed in the last week",
+    ]),
+    ("Ordinary interest rates", [
+        "The 10 year US government bond interest rate right now",
+        "How much that rate has changed in the last week",
+    ]),
+    ("Interest rates after inflation", [
+        "The 10 year US interest rate, adjusted for expected inflation",
+        "How much that adjusted rate has changed in the last week",
+    ]),
+    ("What investors expect inflation to do", [
+        "The market's current guess at future inflation",
+        "How much that guess has changed in the last week",
+    ]),
+    ("Silver", [
+        "How much silver's price changed over the last week",
+    ]),
+    ("The calendar", [
+        "Which day of the week it is",
+        "Which month it is",
+    ]),
+]
+
 
 # ---------------------------------------------------------------- style
 
@@ -207,6 +248,23 @@ st.markdown(f"""
   .unit-label {{
       font-size: 0.72rem;
       color: {MUTED};
+  }}
+
+  .feature-group {{
+      margin-bottom: 0.9rem;
+  }}
+
+  .feature-group-title {{
+      font-size: 0.85rem;
+      font-weight: 650;
+      color: {INK};
+      margin-bottom: 0.25rem;
+  }}
+
+  .feature-item {{
+      font-size: 0.82rem;
+      color: {MUTED};
+      margin: 0.15rem 0 0.15rem 1rem;
   }}
 
   table {{ font-variant-numeric: tabular-nums; }}
@@ -418,7 +476,7 @@ with h1:
         inr_10 = inr_per_10g(spot, usdinr)
         inr_block = (
             f"<div class='inr-row'>"
-            f"<div class='unit-label' style='margin-bottom:0.3rem'>Estimated price in India</div>"
+            f"<div class='unit-label' style='margin-bottom:0.3rem'>Estimated price in India, today</div>"
             f"<div class='unit-row'>"
             f"<div><div class='unit-inr'>₹{inr_g:,.0f}</div>"
             f"<div class='unit-label'>per gram</div></div>"
@@ -505,6 +563,9 @@ with bl:
             f"<div class='inr-row'>"
             f"<div class='unit-label' style='margin-bottom:0.3rem'>Estimated in rupees, per 10 grams</div>"
             f"<div class='unit-inr' style='font-size:1.3rem'>₹{inr_lo:,.0f} to ₹{inr_hi:,.0f}</div>"
+            f"<div class='unit-label' style='margin-top:0.35rem'>Uses today's dollar to rupee "
+            f"rate. Assumes the rupee itself stays put and only gold's dollar price moves. In "
+            f"practice the rupee moves too, so the real number could shift a bit more than this.</div>"
             f"</div>"
         )
     else:
@@ -667,7 +728,10 @@ if exp is not None:
                 f"<div class='unit-label'>simple guess</div></div>"
                 f"<div><div class='unit-inr' style='color:{AMBER}'>₹{pred_10g_inr:,.0f}</div>"
                 f"<div class='unit-label'>model's guess</div></div>"
-                f"</div></div>"
+                f"</div>"
+                f"<div class='unit-label' style='margin-top:0.35rem'>Both use today's exchange "
+                f"rate. The rupee itself could also move by tomorrow, which this does not "
+                f"account for.</div></div>"
             )
         else:
             inr_exp_row = ""
@@ -729,7 +793,9 @@ is the easiest mistake to make when looking at this box.
 **The big range in the middle is the whole point of this page.** It says
 that next week, gold will most likely end up somewhere between two numbers.
 Not exactly where, just somewhere in that range. Both a dollar version and a
-rupee version are shown.
+rupee version are shown. The rupee version uses today's exchange rate, since
+tomorrow's exchange rate cannot be known any better than tomorrow's gold
+price can.
 
 **The choice between 80% and 95%** changes how sure you want to be. At 80
 percent, the real price stays inside the range about 4 weeks out of 5. One
@@ -790,26 +856,43 @@ because nothing about it can be adjusted after the fact.
 
 **Guessing the exact price does not work, at least not yet.** Several
 different computer programs were trained on 18 pieces of information that
-are supposed to affect gold prices: the strength of the US dollar, interest
-rates, how nervous investors are feeling, expectations about inflation,
-silver prices, and more.
+are supposed to affect gold prices. Here is the full list, in plain terms:
+""")
 
-None of them could reliably guess which way gold would move next week. The
-best of them was right about direction only half the time, which is no
+    for title, items in FEATURE_GROUPS:
+        item_html = "".join(f"<div class='feature-item'>&bull; {i}</div>" for i in items)
+        st.markdown(
+            f"<div class='feature-group'>"
+            f"<div class='feature-group-title'>{title}</div>"
+            f"{item_html}</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("""
+That is 18 pieces of information in total. None of them, alone or combined,
+could reliably guess which way gold would move next week. The best of the
+programs tested was right about direction only half the time, which is no
 better than flipping a coin. One of the more complex programs matched old
 data almost perfectly, but when tested on new data it had never seen, it did
 worse than simply assuming nothing would change. In plain terms, it had
 memorized the past so well that it stopped being useful for the future.
 
 A separate attempt tried to guess tomorrow's exact price specifically, using
-five different programs. The best one barely beat a simple "tomorrow will be
-the same as today" guess, by less than one fifth of one percent, and even
-that thin edge came from doing badly for the first few years and then doing
-well for the rest. That is not solid enough to trust, so instead of using
-it, it is being tracked live, in both dollars and rupees (see the experiment
-box above, if it is showing). If it earns a real edge over the next couple
-of months, it will be added properly. If it does not, that will be reported
-honestly too.
+five different programs, built on the same 18 pieces of information above.
+The best one barely beat a simple "tomorrow will be the same as today"
+guess, by less than one fifth of one percent, and even that thin edge came
+from doing badly for the first few years and then doing well for the rest.
+That is not solid enough to trust, so instead of using it, it is being
+tracked live, in both dollars and rupees (see the experiment box above, if
+it is showing). If it earns a real edge over the next couple of months, it
+will be added properly. If it does not, that will be reported honestly too.
+
+A separate check was also run on the rupee exchange rate itself, since
+converting a future gold price into rupees using today's exchange rate is
+only an approximation. That check also failed to beat a simple "the rate
+stays the same" guess, which matches decades of well known research on
+currency markets. So the rupee conversion keeps using today's rate,
+honestly, rather than a guess dressed up to look more precise than it is.
 
 This is why the dotted line down the middle of the chart is simply today's
 price drawn forward. Nothing has beaten that fairly yet, so nothing has
@@ -839,13 +922,15 @@ with st.expander("What this does not do, and what to be careful about"):
         f"Your local price adds duty, tax, and dealer margin on top of that. "
         f"When this price moves, yours moves too, but the exact level will "
         f"always be different.\n"
-        f"- **The rupee price is only an estimate.** It uses the 15 percent duty "
+        f"- **The rupee price is only an estimate, and it uses today's exchange "
+        f"rate even when showing a future price.** It uses the 15 percent duty "
         f"rate in effect since May 2026, 3 percent GST, and a rough guess at "
         f"dealer margin. It does not include making charges, which vary too much "
-        f"shop to shop to estimate fairly. It also does not account for the "
-        f"rupee to dollar exchange rate itself moving, only for gold's dollar "
-        f"price moving, so your actual rupee cost could shift by more than shown "
-        f"here.\n"
+        f"shop to shop to estimate fairly. It also assumes the rupee to dollar "
+        f"rate itself does not move between now and the date being shown, only "
+        f"gold's dollar price does. In practice the rupee moves too, and a check "
+        f"on the rupee rate found no reliable way to predict that movement "
+        f"either, so this stays an honest approximation rather than a forecast.\n"
         f"- **The price updates every 30 seconds. The range only updates once a "
         f"day.** That is because the range is built from full days of price "
         f"history, and updating it every few seconds would add noise, not useful "
