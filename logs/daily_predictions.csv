@@ -1,2 +1,3 @@
 logged_at,data_through,model,spot,pred_ret_pct,pred_price,resolves_on,actual_price,model_abs_err,naive_abs_err,model_beat_naive
 2026-07-18,2026-07-16,catboost,3985.6,0.0984,3989.52,,,,,
+2026-07-21,2026-07-17,catboost,4012.7,0.1468,4018.6,,,,,
