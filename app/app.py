@@ -10,6 +10,11 @@ converted.
 
 Price refreshes every 30 seconds. The band does not, because it is built
 from full days of price history, not seconds.
+
+Two experimental sections track live, unproven point forecasts (next-day
+gold price, next-day USD/INR rate) separately from the validated weekly
+band. Neither experiment feeds into the trusted numbers above it until it
+has earned that with real out-of-sample results, not backtest alone.
 """
 
 import sys
@@ -61,10 +66,8 @@ BACKTEST = {
 
 WEEKLY_LOG = ROOT / "logs" / "predictions.csv"
 DAILY_LOG = ROOT / "logs" / "daily_predictions.csv"
+FX_LOG = ROOT / "logs" / "fx_predictions.csv"
 
-# The 18 features the models were trained on, grouped and described in plain
-# words. Kept here as data so the evidence section and any future summary
-# stay in sync with what features.py actually builds.
 FEATURE_GROUPS = [
     ("Gold's own recent moves", [
         "How much gold changed yesterday",
@@ -103,7 +106,6 @@ FEATURE_GROUPS = [
         "Which month it is",
     ]),
 ]
-
 
 # ---------------------------------------------------------------- style
 
@@ -338,6 +340,7 @@ def live_track_record(conf):
 
 @st.cache_data(ttl=3600)
 def daily_experiment():
+    """Latest catboost next-day gold forecast + its live track record."""
     try:
         df = pd.read_csv(DAILY_LOG)
     except Exception:
@@ -353,6 +356,30 @@ def daily_experiment():
     return {
         "spot": float(latest["spot"]),
         "pred_price": float(latest["pred_price"]),
+        "data_through": latest["data_through"],
+        "n_resolved": n,
+        "beat_rate": rate,
+    }
+
+
+@st.cache_data(ttl=3600)
+def fx_experiment():
+    """Latest random-forest next-day USD/INR forecast + its live track record."""
+    try:
+        df = pd.read_csv(FX_LOG)
+    except Exception:
+        return None
+    if len(df) == 0:
+        return None
+
+    latest = df.iloc[-1]
+    resolved = df[df["model_beat_naive"].notna()]
+    n = len(resolved)
+    rate = float(resolved["model_beat_naive"].astype(bool).mean()) if n > 0 else None
+
+    return {
+        "spot": float(latest["spot"]),
+        "pred_rate": float(latest["pred_rate"]),
         "data_through": latest["data_through"],
         "n_resolved": n,
         "beat_rate": rate,
@@ -683,19 +710,21 @@ else:
 st.write("")
 
 
-# ---------------------------------------------------------------- experiment: tomorrow
+# ---------------------------------------------------------------- experiments
 
 exp = daily_experiment()
+fx_exp = fx_experiment()
 
-if exp is not None:
+if exp is not None or fx_exp is not None:
     st.markdown("<hr class='rule'>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='eyebrow'>Not part of the main tool. Watch it, do not rely on it</div>"
+        f"<div class='eyebrow'>Not part of the main tool. Watch, do not rely on these</div>"
         f"<div style='font-size:1.25rem;font-weight:650;letter-spacing:-0.02em;"
-        f"color:{INK};margin-bottom:0.6rem'>An experiment: guessing tomorrow's price</div>",
+        f"color:{INK};margin-bottom:0.6rem'>Experiments: guessing tomorrow's numbers</div>",
         unsafe_allow_html=True,
     )
 
+if exp is not None:
     n = exp["n_resolved"]
     rate = exp["beat_rate"]
 
@@ -740,8 +769,8 @@ if exp is not None:
             f"<div class='experimental-card'>"
             f"<div class='sub' style='margin-bottom:0.5rem'>A computer model was "
             f"trained on 18 pieces of market information and is being tested "
-            f"against what actually happens the next day. For {exp['data_through']}, "
-            f"it guessed:</div>"
+            f"against what actually happens the next day, in gold's dollar price. "
+            f"For {exp['data_through']}, it guessed:</div>"
             f"<div style='display:flex;gap:2rem;align-items:baseline'>"
             f"<div><div class='unit' style='font-size:1.3rem'>${exp['spot']:,.0f}</div>"
             f"<div class='unit-label'>simple guess: no change</div></div>"
@@ -769,8 +798,61 @@ if exp is not None:
             f"</div>",
             unsafe_allow_html=True,
         )
+    st.write("")
 
-st.write("")
+if fx_exp is not None:
+    n_fx = fx_exp["n_resolved"]
+    rate_fx = fx_exp["beat_rate"]
+
+    if n_fx < 20:
+        fx_record_txt = (f"Only <b>{n_fx}</b> day{'s' if n_fx != 1 else ''} have finished so far. "
+                         f"That is too few to judge. Check back once there are around 40.")
+    elif rate_fx is None:
+        fx_record_txt = "No finished days yet."
+    else:
+        fx_verdict = ("doing better than" if rate_fx > 0.55 else
+                     "doing worse than" if rate_fx < 0.45 else "about the same as")
+        fx_record_txt = (f"Out of the last <b>{n_fx}</b> finished days, this guess has beaten "
+                         f"a simple 'tomorrow will be the same as today' guess "
+                         f"<b>{rate_fx:.0%}</b> of the time. Right now it is {fx_verdict} "
+                         f"that simple guess.")
+
+    fx_delta = (fx_exp["pred_rate"] / fx_exp["spot"] - 1) * 100
+
+    c1, c2 = st.columns([1.4, 1])
+
+    with c1:
+        st.markdown(
+            f"<div class='experimental-card'>"
+            f"<div class='sub' style='margin-bottom:0.5rem'>A separate model was trained to "
+            f"guess tomorrow's dollar to rupee rate, since that rate matters for the rupee "
+            f"prices shown above. For {fx_exp['data_through']}, it guessed:</div>"
+            f"<div style='display:flex;gap:2rem;align-items:baseline'>"
+            f"<div><div class='unit' style='font-size:1.3rem'>₹{fx_exp['spot']:,.2f}</div>"
+            f"<div class='unit-label'>simple guess: no change</div></div>"
+            f"<div><div class='unit' style='font-size:1.3rem;color:{AMBER}'>"
+            f"₹{fx_exp['pred_rate']:,.2f}</div>"
+            f"<div class='unit-label'>model's guess ({fx_delta:+.3f}%)</div></div>"
+            f"</div>"
+            f"<div class='sub' style='margin-top:0.8rem'>{fx_record_txt}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown(
+            f"<div class='sub' style='line-height:1.55'>"
+            f"Unlike the gold price guesses above, this one looked genuinely promising "
+            f"when checked against ten years of history, beating the simple guess "
+            f"consistently, not just by luck in one stretch. That may be because the "
+            f"Reserve Bank of India actively manages the rupee, which can make its "
+            f"day to day moves less random than a freely traded currency.<br><br>"
+            f"Still, a good backtest is not the same as a proven track record. It is "
+            f"being watched live here before it replaces the simple assumption used "
+            f"everywhere else on this page."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    st.write("")
 
 
 # ---------------------------------------------------------------- explainers
@@ -815,10 +897,12 @@ shown as a shaded area on the right. The dotted line running through the
 middle is not a prediction, it is simply today's price drawn forward,
 because nothing does better than that.
 
-**The experiment section**, if you see it, is something different being
-tested live: a model trying to guess tomorrow's exact price, in both
-dollars and rupees. It has not earned trust yet. It is there to watch, not
-to act on.
+**The experiments section**, if you see it, holds two separate things being
+tested live: a model guessing tomorrow's exact gold price, and a different
+model guessing tomorrow's dollar to rupee rate. Neither has earned a place in
+the main tool yet. They are there to watch, not to act on. The rupee rate
+guess has looked more promising in testing so far than the gold price guess,
+but both are still being proven live before either is trusted.
 
 The one thing worth remembering through all of this: nothing here will ever
 tell you gold is about to go up or down. Nobody can honestly tell you that.
@@ -854,7 +938,7 @@ later, we check whether the real price landed inside it. That live result is
 shown near the top of this page, and it grows more meaningful every week,
 because nothing about it can be adjusted after the fact.
 
-**Guessing the exact price does not work, at least not yet.** Several
+**Guessing the exact gold price does not work, at least not yet.** Several
 different computer programs were trained on 18 pieces of information that
 are supposed to affect gold prices. Here is the full list, in plain terms:
 """)
@@ -877,33 +961,45 @@ data almost perfectly, but when tested on new data it had never seen, it did
 worse than simply assuming nothing would change. In plain terms, it had
 memorized the past so well that it stopped being useful for the future.
 
-A separate attempt tried to guess tomorrow's exact price specifically, using
-five different programs, built on the same 18 pieces of information above.
-The best one barely beat a simple "tomorrow will be the same as today"
-guess, by less than one fifth of one percent, and even that thin edge came
-from doing badly for the first few years and then doing well for the rest.
-That is not solid enough to trust, so instead of using it, it is being
-tracked live, in both dollars and rupees (see the experiment box above, if
-it is showing). If it earns a real edge over the next couple of months, it
-will be added properly. If it does not, that will be reported honestly too.
+A separate attempt tried to guess tomorrow's exact gold price specifically,
+using five different programs, built on the same 18 pieces of information
+above. The best one barely beat a simple "tomorrow will be the same as
+today" guess, by less than one fifth of one percent, and even that thin edge
+came from doing badly for the first few years and then doing well for the
+rest. That is not solid enough to trust, so instead of using it, it is being
+tracked live, in both dollars and rupees (see the experiments section
+above, if it is showing). If it earns a real edge over the next couple of
+months, it will be added properly. If it does not, that will be reported
+honestly too.
 
-A separate check was also run on the rupee exchange rate itself, since
-converting a future gold price into rupees using today's exchange rate is
-only an approximation. That check also failed to beat a simple "the rate
-stays the same" guess, which matches decades of well known research on
-currency markets. So the rupee conversion keeps using today's rate,
-honestly, rather than a guess dressed up to look more precise than it is.
+**A separate check on the dollar to rupee rate turned out differently.** The
+same kind of test was run on next-day USD/INR movement, since converting a
+future gold price into rupees using today's exchange rate is only an
+approximation. This time, several models beat the simple guess clearly and
+consistently, not just by a small margin in one lucky stretch. The pattern
+held up even after removing calendar-based shortcuts the models might have
+been leaning on, and it held up in both the first and second half of the
+ten year test period.
+
+A likely reason: the Reserve Bank of India actively manages the rupee's
+value, stepping in to smooth sharp moves. A managed currency is not the same
+as a freely traded one, and old, well established research showing that
+currency movements cannot be predicted mostly studied freely traded
+currencies, not managed ones. So this result may be real. It is being
+tracked live now, the same way the gold price guess is, and it will only be
+trusted once it proves itself with real days that have not happened yet,
+not just with a good looking backtest.
 
 This is why the dotted line down the middle of the chart is simply today's
-price drawn forward. Nothing has beaten that fairly yet, so nothing has
-replaced it.
+price drawn forward. Nothing has beaten that fairly and durably enough yet,
+so nothing has replaced it.
 
 **Why does the range work when exact guessing does not?** Because which way
 gold moves is close to random, the past truly does not tell you that. But
 how much gold tends to move stays fairly steady over time. Calm weeks tend
 to be followed by more calm weeks, and choppy weeks tend to be followed by
 more choppy weeks. That pattern is real, it can be measured, and it is the
-only thing this tool actually depends on.
+main thing this tool actually depends on.
 """)
 
 with st.expander("What this does not do, and what to be careful about"):
@@ -928,9 +1024,7 @@ with st.expander("What this does not do, and what to be careful about"):
         f"dealer margin. It does not include making charges, which vary too much "
         f"shop to shop to estimate fairly. It also assumes the rupee to dollar "
         f"rate itself does not move between now and the date being shown, only "
-        f"gold's dollar price does. In practice the rupee moves too, and a check "
-        f"on the rupee rate found no reliable way to predict that movement "
-        f"either, so this stays an honest approximation rather than a forecast.\n"
+        f"gold's dollar price does.\n"
         f"- **The price updates every 30 seconds. The range only updates once a "
         f"day.** That is because the range is built from full days of price "
         f"history, and updating it every few seconds would add noise, not useful "
@@ -941,8 +1035,11 @@ with st.expander("What this does not do, and what to be careful about"):
         f"- **Ten years of testing happened mostly while gold prices were rising.** "
         f"Nobody knows for certain how well this would hold up during a long, "
         f"severe crash.\n"
-        f"- **The experiment section, if you see it, has not proven itself yet.** "
-        f"That is exactly why it is being watched instead of trusted.\n"
+        f"- **The experiments section, if you see it, has not proven itself yet, "
+        f"even the rupee rate guess that looked promising in testing.** A good "
+        f"backtest is a reason to watch something closely, not a reason to trust "
+        f"it immediately. That is exactly why it is being watched instead of "
+        f"trusted.\n"
         f"- **None of this is investment advice.** It tells you how much risk "
         f"there is. It does not tell you what to do about it."
     )
