@@ -21,3 +21,4 @@ logged_at,data_through,model,spot,pred_ret_pct,pred_price,resolves_on,actual_pri
 2026-08-14,2026-08-13,catboost,4363.6,0.178,4371.37,,,,,
 2026-08-17,2026-08-14,catboost,4380.4,0.0787,4383.85,,,,,
 2026-08-18,2026-08-17,catboost,4417.8,0.0423,4419.67,,,,,
+2026-08-19,2026-08-18,catboost,4366.0,0.1393,4372.09,,,,,
